@@ -1,10 +1,14 @@
 package main
 
 import (
-	"encoding/base64"
 	"fmt"
 	"io"
+	"log"
+	"mime/multipart"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
 	"github.com/google/uuid"
@@ -51,9 +55,12 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 
 	mediaType := header.Header.Get("Content-Type")
 
-	imageData, err := io.ReadAll(file)
+	// get the extension of the image from MIME type
+	imageExtension := strings.Split(mediaType, "/")[1]
+
+	imgPath, err := cfg.writeThumbnailFileToDisk(file, videoID, imageExtension)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "could not read thumbnail data", err)
+		respondWithError(w, http.StatusInternalServerError, "could not write image to disk", err)
 		return
 	}
 
@@ -62,9 +69,9 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		respondWithError(w, http.StatusUnauthorized, "user not authorized", err)
 		return
 	}
-	imgBase64 := base64.StdEncoding.EncodeToString(imageData)
 
-	thumbnailURL := fmt.Sprintf("data:%s;base64;%s", mediaType, imgBase64)
+	thumbnailURL := fmt.Sprintf("http://localhost:%s/%s", cfg.port, imgPath)
+
 	vidMetaData.ThumbnailURL = &thumbnailURL
 
 	if err := cfg.db.UpdateVideo(vidMetaData); err != nil {
@@ -73,4 +80,24 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	}
 
 	respondWithJSON(w, http.StatusOK, vidMetaData)
+}
+
+func (cfg *apiConfig) writeThumbnailFileToDisk(imageData multipart.File, videoID uuid.UUID, extension string) (string, error) {
+	imagePath := fmt.Sprintf("/%s.%s", videoID, extension)
+
+	imageAbsPath := filepath.Join(cfg.assetsRoot, imagePath)
+
+	newFile, err := os.Create(imageAbsPath)
+	if err != nil {
+		return "", fmt.Errorf("could not create file at path %s", imageAbsPath)
+	}
+
+	written, err := io.Copy(newFile, imageData)
+	if err != nil {
+		return "", fmt.Errorf("could not copy multipart")
+	}
+
+	log.Printf("wrote %d bytes to disk at %s", written, imageAbsPath)
+
+	return imageAbsPath, nil
 }
