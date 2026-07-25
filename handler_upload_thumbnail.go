@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"mime"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -55,6 +56,16 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 
 	mediaType := header.Header.Get("Content-Type")
 
+	mediaType, _, err = mime.ParseMediaType(mediaType)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "error parsing media type", err)
+		return
+	}
+
+	if strings.Split(mediaType, "/")[0] != "image" {
+		respondWithError(w, http.StatusBadRequest, "not an image", fmt.Errorf("non image uploaded as thumbnail"))
+		return
+	}
 	// get the extension of the image from MIME type
 	imageExtension := strings.Split(mediaType, "/")[1]
 
