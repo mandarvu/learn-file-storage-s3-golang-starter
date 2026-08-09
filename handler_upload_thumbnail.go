@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"log"
@@ -62,6 +64,11 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	randByte := make([]byte, 32)
+	rand.Read(randByte)
+
+	base64RandomName := base64.StdEncoding.EncodeToString(randByte)
+
 	if strings.Split(mediaType, "/")[0] != "image" {
 		respondWithError(w, http.StatusBadRequest, "not an image", fmt.Errorf("non image uploaded as thumbnail"))
 		return
@@ -69,7 +76,7 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	// get the extension of the image from MIME type
 	imageExtension := strings.Split(mediaType, "/")[1]
 
-	imgPath, err := cfg.writeThumbnailFileToDisk(file, videoID, imageExtension)
+	imgPath, err := cfg.writeThumbnailFileToDisk(file, base64RandomName, imageExtension)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "could not write image to disk", err)
 		return
@@ -93,7 +100,7 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	respondWithJSON(w, http.StatusOK, vidMetaData)
 }
 
-func (cfg *apiConfig) writeThumbnailFileToDisk(imageData multipart.File, videoID uuid.UUID, extension string) (string, error) {
+func (cfg *apiConfig) writeThumbnailFileToDisk(imageData multipart.File, videoID string, extension string) (string, error) {
 	imagePath := fmt.Sprintf("/%s.%s", videoID, extension)
 
 	imageAbsPath := filepath.Join(cfg.assetsRoot, imagePath)
